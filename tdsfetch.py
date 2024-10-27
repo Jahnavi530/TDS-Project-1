@@ -3,7 +3,7 @@ import csv
 import time
 import os
 
-GITHUB_TOKEN = "top_secret_token_do_not_touch"
+GITHUB_TOKEN = " tds-project-token-1"
 HEADERS = {"Authorization": f"token {GITHUB_TOKEN}"}
 
 def get_users_in_city(city="Toronto", min_followers=100):
