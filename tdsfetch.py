@@ -1,12 +1,14 @@
 import requests
 import csv
+import time
+import os
 
 GITHUB_TOKEN = "top_secret_token_do_not_touch"
 HEADERS = {"Authorization": f"token {GITHUB_TOKEN}"}
 
-def get_users_in_basel():
+def get_users_in_city(city="Toronto", min_followers=100):
     users = []
-    query = "location:Basel+followers:>10"
+    query = f"location:{city}+followers:>{min_followers}"
     page = 1
     per_page = 100
     total_users = 0
@@ -28,12 +30,9 @@ def get_users_in_basel():
             break
 
         page += 1
+        time.sleep(1)  # Rate limiting
 
-    detailed_users = []
-    for user in users:
-        user_info = get_user_details(user['login'])
-        detailed_users.append(user_info)
-
+    detailed_users = [get_user_details(user['login']) for user in users]
     return detailed_users
 
 def get_user_details(username):
@@ -41,17 +40,17 @@ def get_user_details(username):
     user_data = requests.get(user_url, headers=HEADERS).json()
 
     return {
-        'login': user_data['login'],
-        'name': user_data['name'],
-        'company': clean_company_name(user_data['company']),
-        'location': user_data['location'],
-        'email': user_data['email'],
-        'hireable': user_data['hireable'],
-        'bio': user_data['bio'],
-        'public_repos': user_data['public_repos'],
-        'followers': user_data['followers'],
-        'following': user_data['following'],
-        'created_at': user_data['created_at'],
+        'login': user_data.get('login', ''),
+        'name': user_data.get('name', ''),
+        'company': clean_company_name(user_data.get('company')),
+        'location': user_data.get('location', ''),
+        'email': user_data.get('email', ''),
+        'hireable': user_data.get('hireable', ''),
+        'bio': user_data.get('bio', ''),
+        'public_repos': user_data.get('public_repos', 0),
+        'followers': user_data.get('followers', 0),
+        'following': user_data.get('following', 0),
+        'created_at': user_data.get('created_at', ''),
     }
 
 def clean_company_name(company):
@@ -59,49 +58,64 @@ def clean_company_name(company):
         company = company.strip().upper()
         if company.startswith('@'):
             company = company[1:]
-    return company
+    return company or ""
 
 def get_user_repos(username):
-    repos_url = f"https://api.github.com/users/{username}/repos?per_page=500"
-    response = requests.get(repos_url, headers=HEADERS)
-    repos_data = response.json()
-
     repos = []
-    for repo in repos_data:
-        repos.append({
-            'login': username,
-            'full_name': repo['full_name'],
-            'created_at': repo['created_at'],
-            'stargazers_count': repo['stargazers_count'],
-            'watchers_count': repo['watchers_count'],
-            'language': repo['language'],
-            'has_projects': repo['has_projects'],
-            'has_wiki': repo['has_wiki'],
-            'license_name': repo['license']['key'] if repo['license'] else None,
-        })
+    page = 1
+    per_page = 100
+    while True:
+        repos_url = f"https://api.github.com/users/{username}/repos?per_page={per_page}&page={page}"
+        response = requests.get(repos_url, headers=HEADERS)
+        if response.status_code != 200:
+            print("Error fetching repos for user:", username)
+            break
+
+        repos_data = response.json()
+        if not repos_data:
+            break
+
+        for repo in repos_data:
+            repos.append({
+                'login': username,
+                'full_name': repo['full_name'],
+                'created_at': repo['created_at'],
+                'stargazers_count': repo['stargazers_count'],
+                'watchers_count': repo['watchers_count'],
+                'language': repo.get('language', ''),
+                'has_projects': repo.get('has_projects', False),
+                'has_wiki': repo.get('has_wiki', False),
+                'license_name': repo['license']['key'] if repo.get('license') else '',
+            })
+
+        page += 1
+        time.sleep(1)  # Rate limiting
 
     return repos
 
-def save_users_to_csv(users):
-    with open('users.csv', mode='w', newline='') as file:
-        writer = csv.DictWriter(file, fieldnames=['login', 'name', 'company', 'location', 'email', 'hireable', 'bio', 'public_repos', 'followers', 'following', 'created_at'])
+def save_to_csv(data, filename, fieldnames):
+    os.makedirs("output", exist_ok=True)
+    filepath = os.path.join("output", filename)
+    with open(filepath, mode='w', newline='') as file:
+        writer = csv.DictWriter(file, fieldnames=fieldnames)
         writer.writeheader()
-        writer.writerows(users)
-
-def save_repos_to_csv(repos):
-    with open('repositories.csv', mode='w', newline='') as file:
-        writer = csv.DictWriter(file, fieldnames=['login', 'full_name', 'created_at', 'stargazers_count', 'watchers_count', 'language', 'has_projects', 'has_wiki', 'license_name'])
-        writer.writeheader()
-        writer.writerows(repos)
+        writer.writerows(data)
 
 if __name__ == "__main__":
-    users = get_users_in_basel()
-    save_users_to_csv(users)
+    users = get_users_in_city("Toronto", 100)
+    save_to_csv(users, 'users.csv', [
+        'login', 'name', 'company', 'location', 'email', 'hireable', 'bio', 
+        'public_repos', 'followers', 'following', 'created_at'
+    ])
 
     all_repos = []
     for user in users:
         repos = get_user_repos(user['login'])
         all_repos.extend(repos)
 
-    save_repos_to_csv(all_repos)
-    print("Done")
+    save_to_csv(all_repos, 'repositories.csv', [
+        'login', 'full_name', 'created_at', 'stargazers_count', 'watchers_count', 
+        'language', 'has_projects', 'has_wiki', 'license_name'
+    ])
+    print("Data saved successfully!")
+
