@@ -3,8 +3,16 @@ import csv
 import time
 import os
 
-GITHUB_TOKEN = " tds-project-token-1"
+GITHUB_TOKEN = "token"
 HEADERS = {"Authorization": f"token {GITHUB_TOKEN}"}
+
+def get_rate_limit():
+    response = requests.get("https://api.github.com/rate_limit", headers=HEADERS, timeout=10)
+    rate_limit_info = response.json()
+    remaining_requests = rate_limit_info['rate']['remaining']
+    reset_time = rate_limit_info['rate']['reset']
+    print(f"Remaining requests: {remaining_requests}")
+    print(f"Rate limit resets at: {time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(reset_time))}")
 
 def get_users_in_city(city="Toronto", min_followers=100):
     users = []
@@ -15,7 +23,11 @@ def get_users_in_city(city="Toronto", min_followers=100):
 
     while True:
         url = f"https://api.github.com/search/users?q={query}&per_page={per_page}&page={page}"
-        response = requests.get(url, headers=HEADERS)
+        
+        # Check the rate limit before making a request
+        get_rate_limit()
+        
+        response = requests.get(url, headers=HEADERS, timeout=10)
         print(f"Fetching page {page}...")
 
         if response.status_code != 200:
@@ -25,19 +37,27 @@ def get_users_in_city(city="Toronto", min_followers=100):
         data = response.json()
         users.extend(data['items'])
         total_users += len(data['items'])
+        
+        # Debug: print the total number of users fetched so far
+        print(f"Total users fetched so far: {total_users}")
 
         if len(data['items']) < per_page:
             break
 
         page += 1
-        time.sleep(1)  # Rate limiting
+        time.sleep(2)  # Rate limiting - increased delay
 
     detailed_users = [get_user_details(user['login']) for user in users]
     return detailed_users
 
 def get_user_details(username):
+    print(f"Fetching details for user: {username}")
     user_url = f"https://api.github.com/users/{username}"
-    user_data = requests.get(user_url, headers=HEADERS).json()
+    try:
+        user_data = requests.get(user_url, headers=HEADERS, timeout=10).json()
+    except requests.exceptions.Timeout:
+        print(f"Timeout occurred while fetching user details for {username}")
+        return {}
 
     return {
         'login': user_data.get('login', ''),
@@ -61,12 +81,18 @@ def clean_company_name(company):
     return company or ""
 
 def get_user_repos(username):
+    print(f"Fetching repositories for user: {username}")
     repos = []
     page = 1
     per_page = 100
     while True:
         repos_url = f"https://api.github.com/users/{username}/repos?per_page={per_page}&page={page}"
-        response = requests.get(repos_url, headers=HEADERS)
+        try:
+            response = requests.get(repos_url, headers=HEADERS, timeout=10)
+        except requests.exceptions.Timeout:
+            print(f"Timeout occurred while fetching repos for user: {username}")
+            break
+
         if response.status_code != 200:
             print("Error fetching repos for user:", username)
             break
@@ -89,7 +115,7 @@ def get_user_repos(username):
             })
 
         page += 1
-        time.sleep(1)  # Rate limiting
+        time.sleep(2)  # Rate limiting - increased delay
 
     return repos
 
@@ -118,4 +144,3 @@ if __name__ == "__main__":
         'language', 'has_projects', 'has_wiki', 'license_name'
     ])
     print("Data saved successfully!")
-
