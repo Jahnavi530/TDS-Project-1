@@ -1,5 +1,5 @@
 # TDS-Project-1
-TDS PROJECT 1 / TORONTO:100
+TDS PROJECT 1 / TORONTO:100  ------- TDS_project1.ipynb file contains both the scraping and analysis codes together ( mentioned question numbers through out through comments will try updating he notebook with Questions and everything to make it look professional )
 # - Data Collection
 The data was collected through GitHub's API using location-based and follower-count filters to identify active users and analyze their profiles and repositories. Data from Toronto-based users with 100+ followers was gathered to understand the impact of user profile settings, language usage, and repository features on engagement.
 # - Key Insights
